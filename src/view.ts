@@ -5,6 +5,8 @@ import {
   TFile,
   WorkspaceLeaf,
   parseLinktext,
+  setIcon,
+	setTooltip,
 } from "obsidian";
 import type ReferencePreviewPlugin from "./main";
 
@@ -40,18 +42,15 @@ export class ReferencePreviewView extends ItemView {
     this.headerEl = root.createEl("div", { cls: "refprev-header" });
 
     this.toolbarEl = root.createEl("div", { cls: "refprev-toolbar" });
-    const editBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Edit preview links" });
-    const expandAllBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Expand all" });
-    const collapseAllBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Collapse all" });
-    editBtn.addEventListener("click", () => {
+    const editBtn = this.createToolbarButton("Edit preview links", "pencil", () => {
       if (!this.sourceFile) {
         new Notice("No active note.");
         return;
       }
       this.plugin.openEditPreviewLinksModal(this.sourceFile);
     });
-    expandAllBtn.addEventListener("click", () => this.setAllCollapsed(false));
-    collapseAllBtn.addEventListener("click", () => this.setAllCollapsed(true));
+    const expandAllBtn = this.createToolbarButton("Expand all", "chevrons-down-up", () => this.setAllCollapsed(false));
+    const collapseAllBtn = this.createToolbarButton("Collapse all", "chevrons-up-down", () => this.setAllCollapsed(true));
 
     this.listEl = root.createEl("div", { cls: "refprev-list" });
   }
@@ -202,5 +201,14 @@ export class ReferencePreviewView extends ItemView {
       }
     });
     this.collapsedKeysByFile.set(this.sourcePath, set);
+  }
+
+  private createToolbarButton(label: string, icon: string, onClick: () => void): HTMLButtonElement {
+    const btn = this.toolbarEl.createEl("button", { cls: "refprev-btn" });
+    const iconSpan = btn.createSpan({ cls: "refprev-btn-icon" });
+    setIcon(iconSpan, icon);
+		setTooltip(btn, label);
+    btn.addEventListener("click", onClick);
+    return btn;
   }
 }
