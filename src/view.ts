@@ -6,7 +6,7 @@ import {
   WorkspaceLeaf,
   parseLinktext,
   setIcon,
-	setTooltip,
+  setTooltip,
 } from "obsidian";
 import type ReferencePreviewPlugin from "./main";
 
@@ -207,7 +207,7 @@ export class ReferencePreviewView extends ItemView {
     const btn = this.toolbarEl.createEl("button", { cls: "refprev-btn" });
     const iconSpan = btn.createSpan({ cls: "refprev-btn-icon" });
     setIcon(iconSpan, icon);
-		setTooltip(btn, label);
+    setTooltip(btn, label);
     btn.addEventListener("click", onClick);
     return btn;
   }

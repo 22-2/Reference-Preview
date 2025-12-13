@@ -63,7 +63,7 @@
 .refprev-sort-footer { display:flex; justify-content:flex-end; gap:8px; margin-top: 10px; }
 
 
-.refprev-toolbar { display:flex; gap:8px; margin: 0 0 4px; }
+.refprev-toolbar { display:flex; gap:8px; margin: 0 0 4px; justify-content: flex-end; }
 .refprev-btn { padding: 4px 8px; border: 1px solid var(--background-modifier-border);
   border-radius: 6px; background: var(--background-secondary); cursor: pointer; }
 
