@@ -1,6 +1,7 @@
 import {
   ItemView,
   MarkdownRenderer,
+  Notice,
   TFile,
   WorkspaceLeaf,
   parseLinktext,
@@ -16,6 +17,7 @@ export class ReferencePreviewView extends ItemView {
   private toolbarEl!: HTMLElement;
   private listEl!: HTMLElement;
   private sourcePath = "/";
+  private sourceFile: TFile | null = null;
 
   // 折り畳み状態を「エントリキー」単位で保持（ファイルパス → Set<key>）
   private collapsedKeysByFile = new Map<string, Set<string>>();
@@ -38,8 +40,16 @@ export class ReferencePreviewView extends ItemView {
     this.headerEl = root.createEl("div", { cls: "refprev-header" });
 
     this.toolbarEl = root.createEl("div", { cls: "refprev-toolbar" });
+    const editBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Edit preview links" });
     const expandAllBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Expand all" });
     const collapseAllBtn = this.toolbarEl.createEl("button", { cls: "refprev-btn", text: "Collapse all" });
+    editBtn.addEventListener("click", () => {
+      if (!this.sourceFile) {
+        new Notice("No active note.");
+        return;
+      }
+      this.plugin.openEditPreviewLinksModal(this.sourceFile);
+    });
     expandAllBtn.addEventListener("click", () => this.setAllCollapsed(false));
     collapseAllBtn.addEventListener("click", () => this.setAllCollapsed(true));
 
@@ -51,6 +61,7 @@ export class ReferencePreviewView extends ItemView {
   async renderForFile(file: TFile) {
     if (!file) return;
 
+    this.sourceFile = file;
     this.sourcePath = file.path;
     const { frontmatterKey, maxItems } = this.plugin.settings;
     const cache = this.app.metadataCache.getFileCache(file);

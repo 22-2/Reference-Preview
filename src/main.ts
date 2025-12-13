@@ -58,17 +58,7 @@ export default class ReferencePreviewPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (!file) return false;
 
-        const current = this.getPreviewList(file);
-        if (!checking) {
-          new ReorderAndAddModal(this.app, file, current, async (newOrder) => {
-            await this.setPreviewList(file, newOrder);
-            // 即時反映
-            const leaf = this.getExistingViewLeaf();
-            if (leaf && (leaf.view as any)?.getViewType?.() === VIEW_TYPE_REFERENCE_PREV) {
-              (leaf.view as ReferencePreviewView).renderForFile(file);
-            }
-          }).open();
-        }
+        if (!checking) this.openEditPreviewLinksModal(file);
         return true;
       }
     });
@@ -147,6 +137,17 @@ export default class ReferencePreviewPlugin extends Plugin {
 
   private isRefPrevView(v: View): v is ReferencePreviewView {
     return (v as any)?.getViewType?.() === VIEW_TYPE_REFERENCE_PREV;
+  }
+
+  openEditPreviewLinksModal(file: TFile) {
+    const current = this.getPreviewList(file);
+    new ReorderAndAddModal(this.app, file, current, async (newOrder) => {
+      await this.setPreviewList(file, newOrder);
+      const leaf = this.getExistingViewLeaf();
+      if (leaf && this.isRefPrevView(leaf.view)) {
+        await leaf.view.renderForFile(file);
+      }
+    }).open();
   }
 
   private computeFrontmatterSig(file: TFile): string {
