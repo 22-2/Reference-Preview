@@ -12,6 +12,11 @@ import type ReferencePreviewPlugin from "./main";
 
 export const VIEW_TYPE_REFERENCE_PREV = "reference-previews-view";
 
+type ParsedSection = {
+  key: string;
+  entries: string[];
+};
+
 export class ReferencePreviewView extends ItemView {
   plugin: ReferencePreviewPlugin;
 
@@ -21,7 +26,6 @@ export class ReferencePreviewView extends ItemView {
   private sourcePath = "/";
   private sourceFile: TFile | null = null;
 
-  // 折り畳み状態を「エントリキー」単位で保持（ファイルパス → Set<key>）
   private collapsedKeysByFile = new Map<string, Set<string>>();
 
   constructor(leaf: WorkspaceLeaf, plugin: ReferencePreviewPlugin) {
@@ -29,10 +33,18 @@ export class ReferencePreviewView extends ItemView {
     this.plugin = plugin;
   }
 
-  getViewType() { return VIEW_TYPE_REFERENCE_PREV; }
-  getDisplayText() { return "Reference previews"; }
-  getIcon() { return "links-coming-in"; }
-  setPlugin(plugin: ReferencePreviewPlugin) { this.plugin = plugin; }
+  getViewType() {
+    return VIEW_TYPE_REFERENCE_PREV;
+  }
+  getDisplayText() {
+    return "Reference previews";
+  }
+  getIcon() {
+    return "links-coming-in";
+  }
+  setPlugin(plugin: ReferencePreviewPlugin) {
+    this.plugin = plugin;
+  }
 
   async onOpen() {
     const root = this.containerEl;
@@ -57,8 +69,16 @@ export class ReferencePreviewView extends ItemView {
 
   async onClose() {}
 
-  async renderForFile(file: TFile) {
-    if (!file) return;
+  private parseFrontmatterValue(raw: unknown): string[] {
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === "string") {
+      return raw
+        .split(/\n|,|;/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
 
     this.sourceFile = file;
     this.sourcePath = file.path;
@@ -66,55 +86,89 @@ export class ReferencePreviewView extends ItemView {
     const cache = this.app.metadataCache.getFileCache(file);
     const fm = cache?.frontmatter;
 
-    this.headerEl.setText(`Reference previews — ${file.basename}`);
-    this.listEl.empty();
+    const sections: ParsedSection[] = [];
 
-    if (!fm || fm[frontmatterKey] == null) {
-      this.listEl.createEl("div", { text: `Frontmatter field "${frontmatterKey}" not found.`, cls: "refprev-empty" });
-      return;
+    for (const k of keys.length ? keys : ["previewLinks"]) {
+      const entries = this.parseFrontmatterValue(fm?.[k]);
+      if (!entries.length) continue;
+      const slice = maxItems && entries.length > maxItems ? entries.slice(0, maxItems) : entries;
+      sections.push({ key: k, entries: slice });
     }
 
-    let entries: string[] = [];
-    const raw = fm[frontmatterKey];
-    if (Array.isArray(raw)) entries = raw.map(String);
-    else if (typeof raw === "string")
-      entries = raw.split(/\n|,|;/).map(s => s.trim()).filter(Boolean);
+    if (this.plugin.settings.dedupe) {
+      const seen = new Set<string>();
+      for (const sec of sections) {
+        const filtered: string[] = [];
+        for (const e of sec.entries) {
+          const ek = this.entryKey(sec.key, e);
+          if (seen.has(ek)) continue;
+          seen.add(ek);
+          filtered.push(e);
+        }
+        sec.entries = filtered;
+      }
+    }
 
-    if (!entries.length) {
-      this.listEl.createEl("div", { text: "No entries.", cls: "refprev-empty" });
+    return sections.filter((s) => s.entries.length);
+  }
+
+  async renderForFile(file: TFile) {
+    if (!file) return;
+
+    this.sourcePath = file.path;
+    this.headerEl.setText(`Reference previews - ${file.basename}`);
+    this.listEl.empty();
+
+    const sections = this.buildSections(file);
+    if (!sections.length) {
+      const keys = (this.plugin.settings.frontmatterKeys || []).join(", ") || "previewLinks";
+      this.listEl.createEl("div", {
+        text: `No entries found in fields: ${keys}`,
+        cls: "refprev-empty",
+      });
       return;
     }
 
     const collapsed = this.collapsedKeysByFile.get(this.sourcePath) ?? new Set<string>();
     this.collapsedKeysByFile.set(this.sourcePath, collapsed);
 
-    const slice = maxItems && entries.length > maxItems ? entries.slice(0, maxItems) : entries;
+    const showHeaders = !!this.plugin.settings.showPropertyHeaders;
 
-    for (const entry of slice) {
-      const key = this.entryKey(entry);
-      const isCollapsed = collapsed.has(key);
-      await this.renderOne(entry, key, isCollapsed);
+    for (const sec of sections) {
+      let targetContainer: HTMLElement = this.listEl;
+
+      if (showHeaders) {
+        const details = this.listEl.createEl("details", { cls: "refprev-section", attr: { open: "" } });
+        const summary = details.createEl("summary", { cls: "refprev-section-title" });
+        summary.setText(`${sec.key} (${sec.entries.length})`);
+        targetContainer = details.createEl("div", { cls: "refprev-section-body" });
+      }
+
+      for (const entry of sec.entries) {
+        const key = this.entryKey(sec.key, entry);
+        const isCollapsed = collapsed.has(key);
+        await this.renderOne(targetContainer, entry, key, isCollapsed);
+      }
     }
   }
 
-  // エントリから安定キーを生成（インデックスに依存しない）
-  private entryKey(entry: string): string {
+  private entryKey(propKey: string, entry: string): string {
     const m = entry.match(/^\[\[(.+?)\]\]$/);
     if (m) {
       const inside = m[1];
       const pipeIdx = inside.indexOf("|");
-      const targetRaw = pipeIdx >= 0 ? inside.slice(0, pipeIdx) : inside; // aliasは無視
+      const targetRaw = pipeIdx >= 0 ? inside.slice(0, pipeIdx) : inside;
       const targetNoExt = targetRaw.replace(/\.md$/i, "");
       const { path, subpath } = parseLinktext(targetNoExt);
       const sp = subpath ? `#${subpath}` : "";
-      return `wikilink:${path || targetNoExt}${sp}`;
+      return `p:${propKey}|wikilink:${path || targetNoExt}${sp}`;
     }
-    if (/^https?:\/\//i.test(entry)) return `url:${entry}`;
-    return `txt:${entry}`;
+    if (/^https?:\/\//i.test(entry)) return `p:${propKey}|url:${entry}`;
+    return `p:${propKey}|txt:${entry}`;
   }
 
-  private async renderOne(entry: string, key: string, initiallyCollapsed: boolean) {
-    const item = this.listEl.createEl("div", { cls: "refprev-item" });
+  private async renderOne(container: HTMLElement, entry: string, key: string, initiallyCollapsed: boolean) {
+    const item = container.createEl("div", { cls: "refprev-item" });
     item.setAttr("data-key", key);
     if (initiallyCollapsed) item.addClass("is-collapsed");
 
@@ -136,7 +190,6 @@ export class ReferencePreviewView extends ItemView {
       this.setCollapsedByKey(key, nextCollapsed);
     });
 
-    // 1) wikiリンク
     const m = entry.match(/^\[\[(.+?)\]\]$/);
     if (m) {
       const inside = m[1];
@@ -161,7 +214,6 @@ export class ReferencePreviewView extends ItemView {
       return;
     }
 
-    // 2) URL
     if (/^https?:\/\//i.test(entry)) {
       labelSpan.setText(entry);
       body.createEl("iframe", { cls: "refprev-iframe", attr: { src: entry, loading: "lazy" } });
@@ -170,7 +222,6 @@ export class ReferencePreviewView extends ItemView {
       return;
     }
 
-    // 3) その他
     labelSpan.setText(entry);
     body.createEl("div", { text: "Not a wikilink or URL.", cls: "refprev-empty" });
   }
