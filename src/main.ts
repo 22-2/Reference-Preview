@@ -236,12 +236,20 @@ export default class ReferencePreviewPlugin extends Plugin {
   }
 
   openEditPreviewLinksModal(file: TFile) {
-    const current = this.getPreviewList(file);
-    new ReorderAndAddModal(this.app, file, current, async (newOrder) => {
-      await this.setPreviewList(file, newOrder);
+    const keys = this.getEffectiveKeys();
+    const initialKey = this.pickInitialEditKey(file);
+    const initialByKey = this.getPreviewListsByKey(file);
+
+    new ReorderAndAddModal(this.app, file, keys, initialKey, initialByKey, async (byKey) => {
+      for (const k of keys) {
+        if (byKey[k]) await this.setPreviewList(file, k, byKey[k]);
+        else await this.setPreviewList(file, k, []);
+      }
+
       const leaf = this.getExistingViewLeaf();
       if (leaf && this.isRefPrevView(leaf.view)) {
         await leaf.view.renderForFile(file);
+        this.fmSigByPath.set(file.path, this.computeFrontmatterSig(file));
       }
     }).open();
   }

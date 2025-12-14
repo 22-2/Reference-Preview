@@ -80,9 +80,9 @@ export class ReferencePreviewView extends ItemView {
     return [];
   }
 
-    this.sourceFile = file;
-    this.sourcePath = file.path;
-    const { frontmatterKey, maxItems } = this.plugin.settings;
+  private buildSections(file: TFile): ParsedSection[] {
+    const keys = this.plugin.settings.frontmatterKeys || [];
+    const { maxItems } = this.plugin.settings;
     const cache = this.app.metadataCache.getFileCache(file);
     const fm = cache?.frontmatter;
 
@@ -115,6 +115,7 @@ export class ReferencePreviewView extends ItemView {
   async renderForFile(file: TFile) {
     if (!file) return;
 
+    this.sourceFile = file;
     this.sourcePath = file.path;
     this.headerEl.setText(`Reference previews - ${file.basename}`);
     this.listEl.empty();
